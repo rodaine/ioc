@@ -2,6 +2,7 @@ package ioc
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"reflect"
@@ -15,11 +16,12 @@ type someStruct struct {
 }
 
 func testBind[T any](t *testing.T, x T) {
+	t.Helper()
 	t.Run(fmt.Sprintf("%T", x), func(t *testing.T) {
 		t.Parallel()
 		c := new(Container)
 		Bind(c, Static(x))
-		assert.Equal(t, x, Resolve[T](c.Freeze()))
+		assert.Equal(t, x, Resolve[T](c))
 	})
 }
 
@@ -74,7 +76,7 @@ func TestBind_Alias(t *testing.T) {
 
 	c := new(Container)
 	Bind(c, Static[uint8](2))
-	assert.Equal(t, byte(2), Resolve[byte](c.Freeze()),
+	assert.Equal(t, byte(2), Resolve[byte](c),
 		"should resolve to the same provider")
 }
 
@@ -88,7 +90,7 @@ func TestBind_Funcs(t *testing.T) {
 
 	assert.Equal(t,
 		reflect.ValueOf(fn).Pointer(),
-		reflect.ValueOf(Resolve[func(int) int](c.Freeze())).Pointer())
+		reflect.ValueOf(Resolve[func(int) int](c)).Pointer())
 
 	c = new(Container)
 	buf := &bytes.Buffer{}
@@ -96,7 +98,7 @@ func TestBind_Funcs(t *testing.T) {
 
 	assert.Equal(t,
 		reflect.ValueOf(buf.WriteString).Pointer(),
-		reflect.ValueOf(Resolve[func(string) (int, error)](c.Freeze())).Pointer())
+		reflect.ValueOf(Resolve[func(string) (int, error)](c)).Pointer())
 }
 
 func TestBind_Interfaces(t *testing.T) {
@@ -104,12 +106,12 @@ func TestBind_Interfaces(t *testing.T) {
 
 	c := new(Container)
 	Bind(c, Static[any]("foobar"))
-	assert.Equal(t, "foobar", Resolve[any](c.Freeze()))
+	assert.Equal(t, "foobar", Resolve[any](c))
 
 	c = new(Container)
 	buf := &bytes.Buffer{}
 	Bind(c, Static[io.Writer](buf))
-	assert.Equal(t, buf, Resolve[io.Writer](c.Freeze()))
+	assert.Equal(t, buf, Resolve[io.Writer](c))
 }
 
 func TestBindNamed(t *testing.T) {
@@ -121,10 +123,9 @@ func TestBindNamed(t *testing.T) {
 	c := new(Container)
 	BindNamed[int](c, "x", Static(x))
 	BindNamed[int](c, "y", Static(y))
-	r := c.Freeze()
 
-	assert.Equal(t, x, ResolveNamed[int](r, "x"))
-	assert.Equal(t, y, ResolveNamed[int](r, "y"))
+	assert.Equal(t, x, ResolveNamed[int](c, "x"))
+	assert.Equal(t, y, ResolveNamed[int](c, "y"))
 }
 
 func TestContainer_Freeze(t *testing.T) {
@@ -133,6 +134,27 @@ func TestContainer_Freeze(t *testing.T) {
 	c := new(Container)
 	assert.NotPanics(t, func() { Bind(c, Static(123)) })
 
-	_ = c.Freeze()
+	c.Freeze()
 	assert.Panics(t, func() { Bind(c, Static("foo")) })
+}
+
+func TestContainer_Context(t *testing.T) {
+	t.Parallel()
+
+	c := new(Container)
+	assert.Equal(t, context.Background(), c.Context())
+}
+
+func TestContainer_Extend(t *testing.T) {
+	t.Parallel()
+
+	c := new(Container)
+	Bind(c, Static(123))
+	c.Freeze()
+
+	ext := c.Extend()
+	Bind(ext, Static("foo"))
+
+	assert.Equal(t, 123, Resolve[int](ext))
+	assert.Equal(t, "foo", Resolve[string](ext))
 }

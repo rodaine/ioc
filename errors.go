@@ -16,14 +16,14 @@ func (err CircularDependencyError) Error() string {
 	case 1:
 		return fmt.Sprintf("circular dependency encountered resolving %v", err[0])
 	default:
-		sb := &strings.Builder{}
-		_, _ = fmt.Fprintf(sb, "circular dependency encountered resolving %v:", err[0])
+		builder := &strings.Builder{}
+		_, _ = fmt.Fprintf(builder, "circular dependency encountered resolving %v:", err[0])
 
 		for _, tn := range err[1:] {
-			_, _ = fmt.Fprintf(sb, "\n- depends on %v", tn)
+			_, _ = fmt.Fprintf(builder, "\n- depends on %v", tn)
 		}
 
-		return sb.String()
+		return builder.String()
 	}
 }
 

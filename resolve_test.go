@@ -8,17 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestResolver_Context(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	r := Resolver{}
-	assert.Equal(t, ctx, r.Context())
-
-	r.ctx = context.WithValue(ctx, "foo", "bar")
-	assert.Equal(t, r.ctx, r.Context())
-}
-
 func TestTryResolveNamedContext(t *testing.T) {
 	t.Parallel()
 
@@ -29,13 +18,12 @@ func TestTryResolveNamedContext(t *testing.T) {
 
 		c := new(Container)
 		var outFoo interface{}
-		BindNamed(c, "fizz", func(r Resolver) (int, error) {
-			outFoo = r.Context().Value("foo")
+		BindNamed(c, "fizz", func(c *Container) (int, error) {
+			outFoo = c.Context().Value("foo")
 			return 123, nil
 		})
-		r := c.Freeze()
 
-		out, err := TryResolveNamedContext[int](ctx, r, "fizz")
+		out, err := TryResolveNamedContext[int](ctx, c, "fizz")
 		assert.NoError(t, err)
 		assert.Equal(t, 123, out)
 		assert.Equal(t, "bar", outFoo)
@@ -46,12 +34,11 @@ func TestTryResolveNamedContext(t *testing.T) {
 
 		c := new(Container)
 		exErr := errors.New("some error")
-		BindNamed(c, "fizz", func(r Resolver) (int, error) {
+		BindNamed(c, "fizz", func(_ *Container) (int, error) {
 			return 42, exErr
 		})
-		r := c.Freeze()
 
-		out, err := TryResolveNamedContext[int](context.Background(), r, "fizz")
+		out, err := TryResolveNamedContext[int](context.Background(), c, "fizz")
 		assert.Zero(t, out)
 		assert.Equal(t, exErr, err)
 	})
@@ -60,9 +47,8 @@ func TestTryResolveNamedContext(t *testing.T) {
 		t.Parallel()
 
 		c := new(Container)
-		r := c.Freeze()
 
-		out, err := TryResolveNamedContext[int](context.Background(), r, "fizz")
+		out, err := TryResolveNamedContext[int](context.Background(), c, "fizz")
 		assert.Zero(t, out)
 		assert.ErrorAs(t, err, &MissingProviderError{})
 	})
@@ -71,15 +57,14 @@ func TestTryResolveNamedContext(t *testing.T) {
 		t.Parallel()
 
 		c := new(Container)
-		BindNamed(c, "foo", func(r Resolver) (int, error) {
-			return TryResolveNamedContext[int](r.Context(), r, "bar")
+		BindNamed(c, "foo", func(c *Container) (int, error) {
+			return TryResolveNamedContext[int](c.Context(), c, "bar")
 		})
-		BindNamed(c, "bar", func(r Resolver) (int, error) {
-			return TryResolveNamedContext[int](r.Context(), r, "foo")
+		BindNamed(c, "bar", func(c *Container) (int, error) {
+			return TryResolveNamedContext[int](c.Context(), c, "foo")
 		})
-		r := c.Freeze()
 
-		out, err := TryResolveNamedContext[int](context.Background(), r, "foo")
+		out, err := TryResolveNamedContext[int](context.Background(), c, "foo")
 		assert.Zero(t, out)
 		assert.ErrorAs(t, err, &CircularDependencyError{})
 	})
@@ -90,9 +75,8 @@ func TestTryResolve(t *testing.T) {
 
 	c := new(Container)
 	Bind(c, Static(42))
-	r := c.Freeze()
 
-	out, err := TryResolve[int](r)
+	out, err := TryResolve[int](c)
 	assert.Equal(t, 42, out)
 	assert.NoError(t, err)
 }
@@ -104,13 +88,12 @@ func TestTryResolveContext(t *testing.T) {
 
 	c := new(Container)
 	var outCtx interface{}
-	Bind(c, Infallible(func(r Resolver) int {
-		outCtx = r.Context().Value("foo")
+	Bind(c, Infallible(func(c *Container) int {
+		outCtx = c.Context().Value("foo")
 		return 42
 	}))
-	r := c.Freeze()
 
-	out, err := TryResolveContext[int](ctx, r)
+	out, err := TryResolveContext[int](ctx, c)
 	assert.Equal(t, 42, out)
 	assert.NoError(t, err)
 	assert.Equal(t, "bar", outCtx)
@@ -121,9 +104,8 @@ func TestTryResolveNamed(t *testing.T) {
 
 	c := new(Container)
 	BindNamed(c, "foo", Static(42))
-	r := c.Freeze()
 
-	out, err := TryResolveNamed[int](r, "foo")
+	out, err := TryResolveNamed[int](c, "foo")
 	assert.Equal(t, 42, out)
 	assert.NoError(t, err)
 }
@@ -133,11 +115,10 @@ func TestResolve(t *testing.T) {
 
 	c := new(Container)
 	Bind(c, Static(42))
-	r := c.Freeze()
 
-	out := Resolve[int](r)
+	out := Resolve[int](c)
 	assert.Equal(t, 42, out)
-	assert.Panics(t, func() { Resolve[string](r) })
+	assert.Panics(t, func() { Resolve[string](c) })
 }
 
 func TestResolveContext(t *testing.T) {
@@ -147,17 +128,16 @@ func TestResolveContext(t *testing.T) {
 
 	c := new(Container)
 	var outCtx interface{}
-	Bind(c, Infallible(func(r Resolver) int {
-		outCtx = r.Context().Value("foo")
+	Bind(c, Infallible(func(c *Container) int {
+		outCtx = c.Context().Value("foo")
 		return 42
 	}))
-	r := c.Freeze()
 
-	out := ResolveContext[int](ctx, r)
+	out := ResolveContext[int](ctx, c)
 	assert.Equal(t, 42, out)
 	assert.Equal(t, "bar", outCtx)
 
-	assert.Panics(t, func() { ResolveContext[string](ctx, r) })
+	assert.Panics(t, func() { ResolveContext[string](ctx, c) })
 }
 
 func TestResolveNamed(t *testing.T) {
@@ -165,11 +145,10 @@ func TestResolveNamed(t *testing.T) {
 
 	c := new(Container)
 	BindNamed(c, "foo", Static(42))
-	r := c.Freeze()
 
-	out := ResolveNamed[int](r, "foo")
+	out := ResolveNamed[int](c, "foo")
 	assert.Equal(t, 42, out)
-	assert.Panics(t, func() { ResolveNamed[string](r, "bar") })
+	assert.Panics(t, func() { ResolveNamed[string](c, "bar") })
 }
 
 func TestResolveNamedContext(t *testing.T) {
@@ -179,14 +158,13 @@ func TestResolveNamedContext(t *testing.T) {
 
 	c := new(Container)
 	var outFoo interface{}
-	BindNamed(c, "fizz", func(r Resolver) (int, error) {
-		outFoo = r.Context().Value("foo")
+	BindNamed(c, "fizz", func(c *Container) (int, error) {
+		outFoo = c.Context().Value("foo")
 		return 123, nil
 	})
-	r := c.Freeze()
 
-	out := ResolveNamedContext[int](ctx, r, "fizz")
+	out := ResolveNamedContext[int](ctx, c, "fizz")
 	assert.Equal(t, 123, out)
 	assert.Equal(t, "bar", outFoo)
-	assert.Panics(t, func() { ResolveNamedContext[string](ctx, r, "bar") })
+	assert.Panics(t, func() { ResolveNamedContext[string](ctx, c, "bar") })
 }

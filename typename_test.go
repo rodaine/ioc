@@ -4,9 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	// intentionally renamed for testing purposes:
-	renamedPkg "github.com/stretchr/testify/require"
+	renamedPkg "github.com/stretchr/testify/require" // intentionally renamed for testing purposes
 )
 
 func TestTypeName_String(t *testing.T) {
@@ -34,8 +32,10 @@ func TestTypeName_String(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for _, tc := range tests {
+		test := tc
 		t.Run(test.ex, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, test.ex, test.tn.String())
 		})
 	}
